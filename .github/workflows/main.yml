@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>EcoCollect – Waste Management System</title>
+<style>
+  :root{--bg:#f4f8f4;--card:#fff;--text:#1d2b20;--muted:#5d6e61;--green:#2e7d32;--line:#dbe6dc;--bio:#6a9f3a;--non:#c77d2c;--rec:#2a7fb8}
+  @media (prefers-color-scheme:dark){:root{--bg:#121a14;--card:#1b261d;--text:#e6f0e7;--muted:#9bb0a0;--green:#66bb6a;--line:#2c3b2f}}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,Segoe UI,Arial,sans-serif;background:var(--bg);color:var(--text)}
+  header{display:flex;justify-content:space-between;align-items:center;padding:14px 20px;background:var(--green);color:#fff;gap:10px;flex-wrap:wrap}
+  header h1{font-size:1.1rem;margin:0}
+  main{max-width:900px;margin:24px auto;padding:0 16px}
+  .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:20px;margin-bottom:18px}
+  label{display:block;font-size:.85rem;color:var(--muted);margin:12px 0 4px}
+  input,select,textarea{width:100%;padding:10px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--text);font:inherit}
+  button{background:var(--green);color:#fff;border:0;padding:10px 18px;border-radius:8px;font:inherit;cursor:pointer;margin-top:16px}
+  button.ghost{background:transparent;border:1px solid #fff;margin:0;padding:6px 12px}
+  button.link{background:none;color:var(--green);padding:0;margin:0;text-decoration:underline}
+  button.small{padding:5px 10px;margin:0;font-size:.82rem}
+  .back{background:transparent;color:var(--green);border:1px solid var(--green);margin:0 0 12px;padding:6px 12px}
+  .login{max-width:520px;margin:30px auto}
+  .tabs{display:flex;gap:6px;margin-bottom:8px}
+  .tabs button{flex:1;margin:0;background:var(--bg);color:var(--text);border:1px solid var(--line)}
+  .tabs button.on{background:var(--green);color:#fff;border-color:var(--green)}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+  @media(max-width:520px){.grid2{grid-template-columns:1fr}}
+  .roles{display:flex;gap:8px;margin-top:4px}
+  .roles label{flex:1;margin:0;border:1px solid var(--line);border-radius:8px;padding:10px;text-align:center;cursor:pointer;color:var(--text)}
+  .roles input{display:none}
+  .roles label:has(input:checked){border-color:var(--green);background:var(--bg);font-weight:700;color:var(--green)}
+  .stock{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:12px}
+  .stock div{border-left:5px solid;border-radius:8px;padding:12px;background:var(--bg)}
+  .stock b{font-size:1.5rem;display:block}
+  .bio{border-color:var(--bio)}.nonbio{border-color:var(--non)}.recycle{border-color:var(--rec)}
+  table{width:100%;border-collapse:collapse;font-size:.9rem;display:block;overflow-x:auto}
+  th,td{text-align:left;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap;vertical-align:middle}
+  .tag{padding:2px 8px;border-radius:99px;font-size:.78rem;color:#fff;background:var(--muted)}
+  .tag.Requested{background:var(--non)}.tag.Confirmed{background:var(--rec)}.tag.Packed{background:#7b5ea7}
+  .tag.InTransit{background:#d98a00}.tag.Delivered{background:var(--green)}
+  .err{color:#c62828;font-size:.85rem;margin-top:8px}
+  .muted{color:var(--muted)}
+  .info{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:10px}
+  .info div{background:var(--bg);border-radius:8px;padding:10px;font-size:.9rem}
+  .info span{display:block;font-size:.75rem;color:var(--muted)}
+  .tl{list-style:none;margin:14px 0 0;padding:0 0 0 6px}
+  .tl li{position:relative;padding:0 0 18px 26px;color:var(--muted)}
+  .tl li::before{content:"";position:absolute;left:0;top:2px;width:14px;height:14px;border-radius:50%;border:2px solid var(--line);background:var(--card)}
+  .tl li::after{content:"";position:absolute;left:6px;top:18px;bottom:0;width:2px;background:var(--line)}
+  .tl li:last-child::after{display:none}
+  .tl li.done{color:var(--text)}
+  .tl li.done::before{background:var(--green);border-color:var(--green)}
+  .tl li small{display:block;color:var(--muted)}
+  .banner{background:var(--bg);border-left:4px solid var(--non);padding:8px 12px;border-radius:6px;margin-top:10px;font-size:.88rem}
+</style>
+</head>
+<body>
+<header>
+  <h1>♻️ EcoCollect – Waste Management</h1>
+  <div id="userbar"></div>
+</header>
+<main id="app"></main>
+
+<script>
+/* ---------- Data layer (localStorage) ---------- */
+const KEY = 'ecocollect_v2';
+const CATS = { bio:'Bio-degradable', nonbio:'Non-bio (non-recyclable)', recycle:'Recyclable' };
+const STAGES = ['Requested','Confirmed','Packed','In Transit','Delivered'];
+
+function load(){
+  try { const d = JSON.parse(localStorage.getItem(KEY)); if (d) return d; } catch(e){}
+  return { users:[], current:null, stock:{bio:0,nonbio:0,recycle:0}, deposits:[], requests:[] };
+}
+let db = load();
+function save(){ try{ localStorage.setItem(KEY, JSON.stringify(db)); }catch(e){} }
+const me = () => db.users.find(u => u.email === db.current);
+const now = () => new Date().toLocaleString();
+const cls = s => s.replace(/\s/g,'');
+
+function esc(s){ const d=document.createElement('div'); d.textContent=s==null?'':s; return d.innerHTML; }
+const $ = id => document.getElementById(id);
+const val = id => $(id) ? $(id).value.trim() : '';
+const addrStr = a => a ? [a.line, a.city, a.state, a.pin].filter(Boolean).join(', ') : '-';
+
+/* ---------- Business logic ---------- */
+function addDeposit(cat, kg){
+  db.stock[cat] += kg;
+  db.deposits.push({ by: me().email, name: me().name, cat, kg, date: now() });
+  processPending();
+  save();
+}
+function newTrackingId(){
+  let id;
+  do { id = 'EC-' + Date.now().toString(36).toUpperCase().slice(-5) + Math.floor(Math.random()*90+10); }
+  while (db.requests.some(r => r.tid === id));
+  return id;
+}
+function addRequest(cat, kg, note){
+  const u = me();
+  db.requests.push({
+    tid: newTrackingId(), by: u.email,
+    company: u.company ? u.company.name : u.name,
+    phone: u.phone, address: u.address,
+    cat, kg, note, status: 'Requested',
+    history: [{ s:'Requested', t: now() }]
+  });
+  processPending();
+  save();
+}
+// Confirm requests (first come, first served) when stock is available
+function processPending(){
+  db.requests.filter(r => r.status === 'Requested').forEach(r => {
+    if (db.stock[r.cat] >= r.kg){
+      db.stock[r.cat] -= r.kg;
+      r.status = 'Confirmed';
+      r.history.push({ s:'Confirmed', t: now() });
+    }
+  });
+}
+// Collector moves a shipment to the next stage
+function advance(tid){
+  const r = db.requests.find(x => x.tid === tid);
+  if (!r || r.status === 'Requested') return;
+  const i = STAGES.indexOf(r.status);
+  if (i < STAGES.length - 1){
+    r.status = STAGES[i+1];
+    r.history.push({ s: r.status, t: now() });
+    save();
+  }
+  render();
+}
+
+/* ---------- Shared UI pieces ---------- */
+function timelineHTML(r){
+  const waiting = r.status === 'Requested';
+  return `
+  <h3>Tracking ${esc(r.tid)} <span class="tag ${cls(r.status)}">${r.status}</span></h3>
+  <p class="muted">${esc(r.company)} · ${r.kg} kg ${CATS[r.cat]}<br>Deliver to: ${esc(addrStr(r.address))}</p>
+  ${waiting ? '<div class="banner">Request received. Waiting for enough stock in the collection centre.</div>' : ''}
+  <ol class="tl">
+    ${STAGES.map(s => {
+      const h = r.history.find(x => x.s === s);
+      return <li class="${h ? 'done' : ''}">${s}${h ? `<small>${esc(h.t)}</small> : ''}</li>`;
+    }).join('')}
+  </ol>`;
+}
+function stockCards(){
+  return `<div class="stock">
+    ${Object.keys(CATS).map(k => <div class="${k}"><span class="muted">${CATS[k]}</span><b>${db.stock[k]} kg</b>in collection centre</div>).join('')}
+  </div>`;
+}
+const catOptions = () => Object.keys(CATS).map(k => <option value="${k}">${CATS[k]}</option>).join('');
+const backBtn = () => <button class="back" onclick="logout()">← Back to Login</button>;
+
+/* ---------- Router ---------- */
+let authMode = 'login';   // login | signup | track
+let trackSel = null;      // selected tracking id in portals
+
+function render(){
+  const u = me();
+  $('userbar').innerHTML = u ? ${esc(u.name)} (${u.role}) <button class="ghost" onclick="logout()">← Back to Login</button> : '';
+  if (!u) return loginView();
+  if (u.role === 'buyer') return buyerView();
+  if (u.role === 'seller') return sellerView();
+  return otherView();
+}
+function logout(){ db.current = null; authMode = 'login'; trackSel = null; save(); render(); }
+function setMode(m){ authMode = m; render(); }
+
+/* ---------- Login / Sign up / Track ---------- */
+function loginView(){
+  const tabs = `<div class="tabs">
+    <button class="${authMode==='login'?'on':''}" onclick="setMode('login')">Login</button>
+    <button class="${authMode==='signup'?'on':''}" onclick="setMode('signup')">Sign up</button>
+    <button class="${authMode==='track'?'on':''}" onclick="setMode('track')">Track shipment</button>
+  </div>`;
+  let body = '';
+  if (authMode === 'login'){
+    body = `<h2>Login</h2>
+      <label>Email address</label><input id="lemail" type="email" autocomplete="email">
+      <div class="err" id="err"></div>
+      <button onclick="doLogin()">Login</button>
+      <p class="muted">New here? <button class="link" onclick="setMode('signup')">Create an account</button></p>`;
+  } else if (authMode === 'signup'){
+    body = `<h2>Create account</h2>
+      <div class="grid2">
+        <div><label>Name</label><input id="name" autocomplete="name"></div>
+        <div><label>Age</label><input id="age" type="number" min="1" max="120"></div>
+      </div>
+      <div class="grid2">
+        <div><label>Email address</label><input id="email" type="email" autocomplete="email"></div>
+        <div><label>Phone number</label><input id="phone" type="tel"></div>
+      </div>
+      <label>I am a…</label>
+      <div class="roles">
+        <label><input type="radio" name="role" value="buyer" onchange="toggleCompany()"><span>Buyer</span></label>
+        <label><input type="radio" name="role" value="seller" onchange="toggleCompany()"><span>Seller</span></label>
+        <label><input type="radio" name="role" value="other" onchange="toggleCompany()"><span>Other</span></label>
+      </div>
+      <div id="cbox" style="display:none">
+        <h3>Company details</h3>
+        <div class="grid2">
+          <div><label>Company name</label><input id="cname"></div>
+          <div><label>Registration / GST number</label><input id="creg"></div>
+        </div>
+        <label>Business type</label>
+        <select id="ctype"><option>Plastic recycler</option><option>Paper recycler</option><option>Metal recycler</option><option>Compost / bio-gas plant</option><option>Other</option></select>
+      </div>
+      <h3>Address details</h3>
+      <label>Street / building</label><input id="aline" autocomplete="street-address">
+      <div class="grid2">
+        <div><label>City</label><input id="acity"></div>
+        <div><label>State</label><input id="astate"></div>
+      </div>
+      <label>PIN code</label><input id="apin" inputmode="numeric" maxlength="10">
+      <div class="err" id="err"></div>
+      <button onclick="doSignup()">Sign up</button>
+      <p class="muted">Already registered? <button class="link" onclick="setMode('login')">← Back to Login</button></p>`;
+  } else {
+    body = `<h2>Track a shipment</h2>
+      <label>Tracking ID</label><input id="tid" placeholder="EC-XXXXXXX">
+      <div class="err" id="err"></div>
+      <button onclick="doTrack()">Track</button>
+      <div id="tresult"></div>
+      <p class="muted"><button class="link" onclick="setMode('login')">← Back to Login</button></p>`;
+  }
+  $('app').innerHTML = <div class="card login">${tabs}${body}</div>;
+}
+function toggleCompany(){
+  const r = document.querySelector('input[name=role]:checked');
+  $('cbox').style.display = r && r.value === 'buyer' ? 'block' : 'none';
+}
+function doLogin(){
+  const email = val('lemail').toLowerCase();
+  const u = db.users.find(x => x.email === email);
+  if (!u) return $('err').textContent = 'No account found for this email. Please sign up.';
+  db.current = email; save(); render();
+}
+function doSignup(){
+  const err = $('err');
+  const name = val('name'), email = val('email').toLowerCase(), phone = val('phone');
+  const age = parseInt(val('age'), 10);
+  const roleEl = document.querySelector('input[name=role]:checked');
+  const address = { line: val('aline'), city: val('acity'), state: val('astate'), pin: val('apin') };
+  if (!name) return err.textContent = 'Please enter your name.';
+  if (!age || age < 1 || age > 120) return err.textContent = 'Enter a valid age.';
+  if (!/^\S+@\S+\.\S+$/.test(email)) return err.textContent = 'Enter a valid email address.';
+  if (!/^[0-9+\-\s]{7,15}$/.test(phone)) return err.textContent = 'Enter a valid phone number.';
+  if (!roleEl) return err.textContent = 'Please choose Buyer, Seller or Other.';
+  if (!address.line || !address.city || !address.state || !address.pin) return err.textContent = 'Please fill in all address details.';
+  const user = { name, email, age, phone, role: roleEl.value, address };
+  if (user.role === 'buyer'){
+    const company = { name: val('cname'), reg: val('creg'), type: val('ctype') };
+    if (!company.name || !company.reg) return err.textContent = 'Please enter company name and registration number.';
+    user.company = company;
+  }
+  const i = db.users.findIndex(x => x.email === email);
+  if (i >= 0) db.users[i] = user; else db.users.push(user);
+  db.current = email; save(); render();
+}
+function doTrack(){
+  const id = val('tid').toUpperCase();
+  const r = db.requests.find(x => x.tid === id);
+  if (!r){ $('tresult').innerHTML = ''; return $('err').textContent = 'No shipment found with this tracking ID.'; }
+  $('err').textContent = '';
+  $('tresult').innerHTML = timelineHTML(r);
+}
+
+/* ---------- Buyer portal ---------- */
+function buyerView(){
+  const u = me();
+  const mine = db.requests.filter(r => r.by === u.email).slice().reverse();
+  const sel = mine.find(r => r.tid === trackSel);
+  $('app').innerHTML = `
+  ${backBtn()}
+  <div class="card"><h2>Buyer Portal</h2>
+    <p class="muted">Common collector stock, sorted into bio, non-bio and recyclable waste.</p>
+    ${stockCards()}</div>
+  <div class="card"><h3>Your company &amp; delivery details</h3>
+    <div class="info">
+      <div><span>Company</span>${esc(u.company ? u.company.name : u.name)}</div>
+      <div><span>Registration / GST</span>${esc(u.company ? u.company.reg : '-')}</div>
+      <div><span>Business type</span>${esc(u.company ? u.company.type : '-')}</div>
+      <div><span>Contact</span>${esc(u.name)} · ${esc(u.phone)}<br>${esc(u.email)}</div>
+      <div style="grid-column:1/-1"><span>Delivery address</span>${esc(addrStr(u.address))}</div>
+    </div>
+  </div>
+  <div class="card"><h3>Request waste for your company</h3>
+    <label>Waste type needed</label><select id="rcat">${catOptions()}</select>
+    <label>Quantity (kg)</label><input id="rkg" type="number" min="1">
+    <label>Note (optional)</label><textarea id="rnote" rows="2" placeholder="e.g. PET bottles only"></textarea>
+    <div class="err" id="rerr"></div>
+    <button onclick="submitRequest()">Send request</button>
+    <p class="muted">A tracking ID is generated for every request. It is delivered to the address above.</p>
+  </div>
+  <div class="card"><h3>My requests &amp; tracking</h3>
+    ${mine.length ? `<table><tr><th>Tracking ID</th><th>Date</th><th>Type</th><th>Kg</th><th>Status</th><th></th></tr>
+      ${mine.map(r => `<tr><td><b>${esc(r.tid)}</b></td><td>${esc(r.history[0].t)}</td><td>${CATS[r.cat]}</td><td>${r.kg}</td>
+        <td><span class="tag ${cls(r.status)}">${r.status}</span></td>
+        <td><button class="small" onclick="trackSel='${r.tid}';buyerView()">Track</button></td></tr>).join('')}</table>
+      : '<p class="muted">No requests yet.</p>'}
+    ${sel ? <hr style="border:0;border-top:1px solid var(--line);margin:16px 0">${timelineHTML(sel)} : ''}
+  </div>`;
+}
+function submitRequest(){
+  const kg = parseFloat(val('rkg'));
+  if (!kg || kg <= 0) return $('rerr').textContent = 'Enter a valid quantity.';
+  addRequest($('rcat').value, kg, val('rnote'));
+  trackSel = db.requests[db.requests.length-1].tid;
+  buyerView();
+}
+
+/* ---------- Seller / collector portal ---------- */
+function sellerView(){
+  const u = me();
+  const mine = db.deposits.filter(d => d.by === u.email).slice().reverse();
+  const ships = db.requests.filter(r => r.status !== 'Requested' && r.status !== 'Delivered').slice().reverse();
+  $('app').innerHTML = `
+  ${backBtn()}
+  <div class="card"><h2>Seller Portal</h2>${stockCards()}
+    <p class="muted">Pickup address: ${esc(addrStr(u.address))} · ${esc(u.phone)}</p></div>
+  <div class="card"><h3>Submit waste to the common collector</h3>
+    <label>Waste type</label><select id="dcat">${catOptions()}</select>
+    <label>Quantity (kg)</label><input id="dkg" type="number" min="1">
+    <div class="err" id="derr"></div>
+    <button onclick="submitDeposit()">Submit waste</button>
+  </div>
+  <div class="card"><h3>Shipments to company buyers</h3>
+    <p class="muted">Update the delivery stage so buyers can track their order.</p>
+    ${ships.length ? `<table><tr><th>Tracking ID</th><th>Company</th><th>Item</th><th>Deliver to</th><th>Status</th><th></th></tr>
+      ${ships.map(r => `<tr><td><b>${esc(r.tid)}</b></td><td>${esc(r.company)}</td><td>${r.kg} kg ${CATS[r.cat]}</td>
+        <td>${esc(addrStr(r.address))}</td><td><span class="tag ${cls(r.status)}">${r.status}</span></td>
+        <td><button class="small" onclick="advance('${r.tid}')">Mark ${STAGES[STAGES.indexOf(r.status)+1]}</button></td></tr>).join('')}</table>
+      : '<p class="muted">No active shipments.</p>'}
+  </div>
+  <div class="card"><h3>My submissions</h3>
+    ${mine.length ? `<table><tr><th>Date</th><th>Type</th><th>Kg</th></tr>
+      ${mine.map(d => <tr><td>${esc(d.date)}</td><td>${CATS[d.cat]}</td><td>${d.kg}</td></tr>).join('')}</table>`
+      : '<p class="muted">Nothing submitted yet.</p>'}
+  </div>`;
+}
+function submitDeposit(){
+  const kg = parseFloat(val('dkg'));
+  if (!kg || kg <= 0) return $('derr').textContent = 'Enter a valid quantity.';
+  addDeposit($('dcat').value, kg);
+  sellerView();
+}
+
+/* ---------- Other ---------- */
+function otherView(){
+  const open = db.requests.filter(r => r.status === 'Requested').length;
+  const moving = db.requests.filter(r => r.status !== 'Requested' && r.status !== 'Delivered').length;
+  const done = db.requests.filter(r => r.status === 'Delivered').length;
+  $('app').innerHTML = `
+  ${backBtn()}
+  <div class="card"><h2>Overview</h2>${stockCards()}
+    <p>Waiting for stock: <b>${open}</b> · In progress: <b>${moving}</b> · Delivered: <b>${done}</b></p>
+  </div>
+  <div class="card"><h3>Track a shipment</h3>
+    <label>Tracking ID</label><input id="tid" placeholder="EC-XXXXXXX">
+    <div class="err" id="err"></div>
+    <button onclick="doTrack()">Track</button>
+    <div id="tresult"></div>
+  </div>
+  <div class="card"><h3>How it works</h3>
+    <p class="muted">Sellers deliver waste to a common collector, where it is separated into bio-degradable, non-bio and recyclable waste. Recycling companies request the material they need, get a tracking ID, and follow the shipment until it is delivered.</p>
+  </div>`;
+}
+
+render();
+</script>
+</body>
+</html>
